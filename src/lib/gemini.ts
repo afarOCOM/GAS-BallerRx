@@ -243,8 +243,8 @@ ${documentText.substring(0, 400000)}
             items: {
               type: Type.OBJECT,
               properties: {
-                title: { type: Type.STRING, description: "Name of the chapter or section" },
-                content: { type: Type.STRING, description: "Detailed list or summary of all learning objectives and topics in this chapter" }
+                title: { type: Type.STRING, description: "Title formatted exactly as 'Name/Topics Covered (Letter#)' where Letter# is the main chapter/section identifier." },
+                content: { type: Type.STRING, description: "Brief text explanation of the topics covered. Summarize the concepts directly in text. DO NOT include sub-objective numbers (e.g., 1.1, 1.2)." }
               },
               required: ["title", "content"]
             }

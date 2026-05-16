@@ -177,6 +177,10 @@ export default function App() {
   const [documentName, setDocumentName] = useState<string | null>(null);
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
   const [showChapterDropdown, setShowChapterDropdown] = useState(false);
+  const [documentHistory, setDocumentHistory] = useState<
+    { name: string; chapters: { title: string; content: string }[]; uploadedAt: number }[]
+  >([]);
+  const [showDocumentHistory, setShowDocumentHistory] = useState(false);
   const [isParsingDocument, setIsParsingDocument] = useState(false);
   const [parseProgress, setParseProgress] = useState<string | null>(null);
   const [generationProgress, setGenerationProgress] = useState<{
@@ -266,6 +270,16 @@ export default function App() {
         setDocumentChapters(JSON.parse(savedChapters));
       } catch (e) {
         console.error("Failed to parse chapters", e);
+      }
+    }
+    
+    // Load document history
+    const savedDocHistory = localStorage.getItem("omni_board_document_history");
+    if (savedDocHistory) {
+      try {
+        setDocumentHistory(JSON.parse(savedDocHistory));
+      } catch (e) {
+        console.error("Failed to parse document history", e);
       }
     }
 
@@ -365,6 +379,7 @@ export default function App() {
     setObjectives("");
     setSelectedChapters([]);
     localStorage.removeItem("omni_board_chapters");
+    localStorage.removeItem("omni_board_document_name");
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -407,7 +422,22 @@ export default function App() {
         const chapters = await parseDocumentToChapters(text);
         if (chapters && chapters.length > 0) {
           setDocumentChapters(chapters);
+          setDocumentName(file.name);
           localStorage.setItem("omni_board_chapters", JSON.stringify(chapters));
+          localStorage.setItem("omni_board_document_name", file.name); // Should we do this? Unnecessary, just the chapters. But let's save to documentHistory instead!
+          
+          const newDoc = {
+            name: file.name,
+            chapters: chapters,
+            uploadedAt: Date.now()
+          };
+          
+          setDocumentHistory(prev => {
+            const next = [newDoc, ...prev.filter(d => d.name !== file.name)].slice(0, 10);
+            localStorage.setItem("omni_board_document_history", JSON.stringify(next));
+            return next;
+          });
+          
           alert(`Successfully extracted ${chapters.length} chapters!`);
         } else {
           alert(
@@ -1108,8 +1138,8 @@ export default function App() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-          <div className="md:col-span-8 space-y-6">
-            <div className="app-card">
+          <div className="md:col-span-8 space-y-6 relative z-[100]">
+            <div className="app-card relative z-[100]">
               <label className="label-caps mb-2 block">
                 System / Topic Focus
               </label>
@@ -1133,36 +1163,104 @@ export default function App() {
 
               <div className="flex justify-between items-end mb-2">
                 <label className="label-caps block">Specific Objectives</label>
-                <div className="relative flex flex-col items-end">
-                  <input
-                    type="file"
-                    accept=".pdf,.txt,.md,.csv"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="syllabus-upload"
-                    disabled={isParsingDocument}
-                  />
-                  <label
-                    htmlFor="syllabus-upload"
-                    className={cn(
-                      "cursor-pointer text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1",
-                      isParsingDocument
-                        ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700/50 pointer-events-none"
-                        : "bg-zinc-50 dark:bg-zinc-900/30 text-zinc-900 dark:text-zinc-100 border-zinc-100 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900/50",
-                    )}
-                  >
-                    {isParsingDocument ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <BookOpen size={14} />
-                    )}
-                    {isParsingDocument ? "Processing..." : "+ Upload Syllabus"}
-                  </label>
-                  {parseProgress && (
-                    <div className="absolute top-full mt-1 right-0 text-[10px] font-medium text-zinc-500 whitespace-nowrap bg-white dark:bg-zinc-900 px-2 py-0.5 rounded shadow-sm dark:shadow-none border border-zinc-100 dark:border-zinc-800/50 z-10">
-                      {parseProgress}
+                <div className="flex gap-2 items-start">
+                  {documentHistory.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowDocumentHistory(!showDocumentHistory)}
+                        className="cursor-pointer text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1 bg-zinc-50 dark:bg-zinc-900/30 text-zinc-900 dark:text-zinc-100 border-zinc-100 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+                        title="Recent Syllabus Documents"
+                      >
+                        <History size={14} />
+                      </button>
+                      {showDocumentHistory && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setShowDocumentHistory(false)}
+                          />
+                          <div className="absolute z-50 right-0 mt-1 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700/50 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                            <div className="p-2 border-b border-zinc-100 dark:border-zinc-800/50 sticky top-0 bg-white dark:bg-zinc-900 z-10 flex justify-between items-center">
+                              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Recent Documents</span>
+                              <button
+                                onClick={() => {
+                                  setDocumentHistory([]);
+                                  localStorage.removeItem("omni_board_document_history");
+                                  setShowDocumentHistory(false);
+                                }}
+                                className="text-[10px] text-zinc-400 hover:text-red-500 font-bold uppercase transition-colors"
+                              >
+                                Clear All
+                              </button>
+                            </div>
+                            <div className="flex flex-col">
+                              {documentHistory.map((doc, i) => (
+                                <div key={i} className="flex justify-between items-center border-b border-zinc-50 dark:border-zinc-800/20 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 group">
+                                  <button
+                                    onClick={() => {
+                                      setDocumentName(doc.name);
+                                      setDocumentChapters(doc.chapters);
+                                      setSelectedChapters([]);
+                                      setShowDocumentHistory(false);
+                                    }}
+                                    className="flex-1 text-left p-3 text-sm font-bold text-zinc-700 dark:text-zinc-300 truncate transition-colors"
+                                    title={doc.name}
+                                  >
+                                    {doc.name}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const newHistory = documentHistory.filter((_, idx) => idx !== i);
+                                      setDocumentHistory(newHistory);
+                                      localStorage.setItem("omni_board_document_history", JSON.stringify(newHistory));
+                                      if (newHistory.length === 0) setShowDocumentHistory(false);
+                                    }}
+                                    className="p-3 text-zinc-300 dark:text-zinc-600 hover:text-red-500 dark:hover:text-red-400 transition-colors shrink-0"
+                                    title="Remove from history"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
+
+                  <div className="relative flex flex-col items-end">
+                    <input
+                      type="file"
+                      accept=".pdf,.txt,.md,.csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="syllabus-upload"
+                      disabled={isParsingDocument}
+                    />
+                    <label
+                      htmlFor="syllabus-upload"
+                      className={cn(
+                        "cursor-pointer text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1",
+                        isParsingDocument
+                          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700/50 pointer-events-none"
+                          : "bg-zinc-50 dark:bg-zinc-900/30 text-zinc-900 dark:text-zinc-100 border-zinc-100 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900/50",
+                      )}
+                    >
+                      {isParsingDocument ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <BookOpen size={14} />
+                      )}
+                      {isParsingDocument ? "Processing..." : "+ Upload Syllabus"}
+                    </label>
+                    {parseProgress && (
+                      <div className="absolute top-full mt-1 right-0 text-[10px] font-medium text-zinc-500 whitespace-nowrap bg-white dark:bg-zinc-900 px-2 py-0.5 rounded shadow-sm dark:shadow-none border border-zinc-100 dark:border-zinc-800/50 z-10">
+                        {parseProgress}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1203,15 +1301,16 @@ export default function App() {
                     </button>
 
                     {showChapterDropdown && (
-                      <div className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      <div className="absolute z-[100] w-[110%] left-0 mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 rounded-lg shadow-2xl max-h-[32rem] overflow-y-auto">
                         {documentChapters.map((chap) => {
                           const isSelected = selectedChapters.includes(
                             chap.title,
                           );
+
                           return (
                             <label
                               key={chap.title}
-                              className="flex items-start gap-3 p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 transition-all duration-200 hover:scale-105 active:scale-95"
+                              className="flex items-start gap-3 p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer border-b border-zinc-100 dark:border-zinc-800/50 last:border-0 transition-colors duration-200"
                             >
                               <input
                                 type="checkbox"
@@ -1237,13 +1336,13 @@ export default function App() {
                                   className={cn(
                                     "text-sm",
                                     isSelected
-                                      ? "font-bold text-zinc-700"
+                                      ? "font-bold text-zinc-900 dark:text-zinc-100"
                                       : "font-medium text-zinc-700 dark:text-zinc-300",
                                   )}
                                 >
                                   {chap.title}
                                 </span>
-                                <span className="text-xs text-zinc-500 line-clamp-1 mt-0.5">
+                                <span className="text-xs text-zinc-500 mt-0.5 line-clamp-2">
                                   {chap.content}
                                 </span>
                               </div>
